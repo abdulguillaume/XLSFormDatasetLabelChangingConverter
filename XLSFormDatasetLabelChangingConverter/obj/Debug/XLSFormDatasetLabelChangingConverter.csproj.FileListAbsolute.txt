@@ -1,0 +1,1 @@
+c:\users\aguillaume\documents\visual studio 2013\Projects\XLSFormDatasetLabelChangingConverter\XLSFormDatasetLabelChangingConverter\bin\Debug\XLSFormDatasetLabelChangingConverter.exe.config
