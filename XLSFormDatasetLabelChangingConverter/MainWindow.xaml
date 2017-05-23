@@ -4,9 +4,9 @@
         xmlns:xctk="http://schemas.xceed.com/wpf/xaml/toolkit"
         Title="MainWindow" Height="428.927" Width="716.968">
     
-    <!--<xctk:BusyIndicator
+    <xctk:BusyIndicator
                 x:Name="ProgressIndicator"
-                IsBusy="False">-->
+                IsBusy="False">
 
         <Grid HorizontalAlignment="Left" Height="386" Margin="10,10,0,0" VerticalAlignment="Top" Width="697">
             <StackPanel HorizontalAlignment="Left" Height="281" Margin="172,68,0,0" VerticalAlignment="Top" Width="352">
@@ -37,6 +37,6 @@
             </StackPanel>
         </Grid>
         
-    <!--</xctk:BusyIndicator>-->
+    </xctk:BusyIndicator>
 
 </Window>

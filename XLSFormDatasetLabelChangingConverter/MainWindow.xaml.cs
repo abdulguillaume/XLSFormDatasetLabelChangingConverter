@@ -1,6 +1,7 @@
 ﻿using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -26,6 +27,27 @@ namespace XLSFormDatasetLabelChangingConverter
     public partial class MainWindow : Window
     {
 
+        List<KeyValuePair<string, List<CodeLabel>>> listChoices = null;
+
+        List<KeyValuePair<string, string[]>> listSurvey = null;
+
+        public class CodeLabel
+        {
+            public string code { get; private set; }
+            public string label { get; private set; }
+
+            public CodeLabel(string code, string label)
+            {
+                this.code = code;
+                this.label = label;
+            }
+
+            //public string getLabel(string code)
+            //{
+            //    return this.code == code ? this.label : null;
+            //}
+
+        }
         public MainWindow()
         {
             InitializeComponent();
@@ -61,6 +83,53 @@ namespace XLSFormDatasetLabelChangingConverter
             if (openFileDialog.ShowDialog() == true)
                 txtXLSFormFile.Text = openFileDialog.FileName;
 
+            ProgressIndicator.IsBusy = true;
+
+            //https://coderwall.com/p/app3ya/read-excel-file-in-c
+            //Create COM Objects. Create a COM object for everything that is referenced
+            Excel.Application xlApp = new Excel.Application();
+
+            //xlsform workbook
+            Excel.Workbook xlWorkbook_XLSForm = xlApp.Workbooks.Open(txtXLSFormFile.Text, ReadOnly: true);
+            //survey sheet
+            Excel._Worksheet xlWorksheet_Survey = xlWorkbook_XLSForm.Sheets[1];
+            Excel.Range xlRange_Survey = xlWorksheet_Survey.UsedRange;
+
+            //choices sheet
+            Excel._Worksheet xlWorksheet_Choices = xlWorkbook_XLSForm.Sheets[2];
+            Excel.Range xlRange_Choices = xlWorksheet_Choices.UsedRange;
+
+
+            Task.Factory.StartNew(() =>
+              {
+
+                  //- start of task
+
+                  Dispatcher.Invoke(DispatcherPriority.Normal, new Action(() =>
+                  {
+                      ProgressIndicator.BusyContent = "Processing XLSForm file...";
+                  }));
+
+                  listChoices = getListFromChoicesWorksheet(xlRange_Choices);
+                  listSurvey = getListFromSurveyWorksheet(xlRange_Survey);
+
+                  //cleanup
+                  GC.Collect();
+                  GC.WaitForPendingFinalizers();
+                  Marshal.ReleaseComObject(xlRange_Survey);
+                  Marshal.ReleaseComObject(xlWorksheet_Survey);
+                  Marshal.ReleaseComObject(xlRange_Choices);
+                  Marshal.ReleaseComObject(xlWorksheet_Choices);
+                  //close and release
+                  xlWorkbook_XLSForm.Close();
+                  Marshal.ReleaseComObject(xlWorkbook_XLSForm);
+
+                //- end of task
+            }).ContinueWith((task) =>
+            {
+                ProgressIndicator.IsBusy = false;
+            }, TaskScheduler.FromCurrentSynchronizationContext()); 
+
         }
 
         private void btnConvertion_Click(object sender, RoutedEventArgs e)
@@ -68,219 +137,268 @@ namespace XLSFormDatasetLabelChangingConverter
             const int DATA_LABEL_POSITION = 3;
             const int DATA_TYPE_POSITION = 1;
 
-            //ProgressIndicator.IsBusy = true;
             string multiple_choice_str = null;
-            /*
-                Task.Factory.StartNew(() =>
-                {*/
 
-                    //- start of task
+            //https://coderwall.com/p/app3ya/read-excel-file-in-c
+            //Create COM Objects. Create a COM object for everything that is referenced
+            Excel.Application xlApp = new Excel.Application();
 
-                    //https://coderwall.com/p/app3ya/read-excel-file-in-c
-                    //Create COM Objects. Create a COM object for everything that is referenced
-                    Excel.Application xlApp = new Excel.Application();
+            //kobo results workbook
+            Excel.Workbook xlWorkbook_Results = xlApp.Workbooks.Open(txtKoboFile.Text, ReadOnly: true);
+            Excel._Worksheet xlWorksheet_Dataset = xlWorkbook_Results.Sheets[1];
+            Excel.Range xlRange_Dataset = xlWorksheet_Dataset.UsedRange;
 
-                    //kobo workbook
-                    Excel.Workbook xlWorkbook_Results = xlApp.Workbooks.Open(txtKoboFile.Text);
-                    Excel._Worksheet xlWorksheet_Dataset = xlWorkbook_Results.Sheets[1];
-                    Excel.Range xlRange_Dataset = xlWorksheet_Dataset.UsedRange;
+            int rowCount_Dataset = xlRange_Dataset.Rows.Count;
+            int colCount_Dataset = xlRange_Dataset.Columns.Count;
 
-                    int rowCount_Dataset = xlRange_Dataset.Rows.Count;
-                    int colCount_Dataset = xlRange_Dataset.Columns.Count;
+            var converted_file = string.Format("{0}\\Converted_{1}.xlsx", Environment.GetFolderPath(Environment.SpecialFolder.Desktop), DateTime.Now.ToFileTime());
 
-                    //Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-                    var converted_file = string.Format("{0}\\Converted__{1}.xlsx", Environment.GetFolderPath(Environment.SpecialFolder.Desktop), DateTime.Now.ToFileTime());
-                    //var xlWorkbook_Converted = xlApp.Workbooks.Open(converted_file);
+           // Stopwatch stopWatch = new Stopwatch();
 
-                    //xlsform workbook
-                    Excel.Workbook xlWorkbook_XLSForm = xlApp.Workbooks.Open(txtXLSFormFile.Text);
-                    //survey sheet
-                    Excel._Worksheet xlWorksheet_Survey = xlWorkbook_XLSForm.Sheets[1];
-                    Excel.Range xlRange_Survey = xlWorksheet_Survey.get_Range("B:B", Type.Missing);
-
-                    //choices sheet
-                    Excel._Worksheet xlWorksheet_Choices = xlWorkbook_XLSForm.Sheets[2];
-                    Excel.Range xlRange_Choices = xlWorksheet_Choices.get_Range("A:B", Type.Missing);
-
-                    // int rowCount_Survey = xlRange_Survey.Rows.Count;
-                    // int rowCount_Choices = xlRange_Choices.Rows.Count;
+           // stopWatch.Start();
 
 
-                    // int tmp = findCodeRowIndex(xlRange_Survey, "cur_ward");
+          //Task.Factory.StartNew(() =>
+          //  {
 
+          //      //- start of task
 
-                    //start decoding labels
-                    //through the dataset columns
-                    int i = 1;
-                    for (var j = 1; j < colCount_Dataset; j++)
+          //      Dispatcher.Invoke(DispatcherPriority.Normal, new Action(() =>
+          //      {
+          //          ProgressIndicator.BusyContent = "Processing file...";
+          //      }));
+ 
+
+                //start decoding labels
+
+                int rowHeader = 1; //this will be fix during the whole process
+
+                for (var j = 1; j < colCount_Dataset; j++)
+                {
+                    string toReplace;
+                    //first row has the header => Cells(1,j)
+                    string header_name = null;
+                    try
                     {
-                        string toReplace;
-                        //first row has the header => Cells(1,j)
-                        string header_name =  xlRange_Dataset.Cells[i, j].Value.ToString();
+                        header_name = xlRange_Dataset.Cells[rowHeader, j].Value.ToString();
+                    }
+                    catch {
+                        break;
+                    }
 
-                        string[] h = header_name.Split('/');
+                    string[] h = header_name.Split('/');
 
-                        //toReplace = h.Length == 1? h[0]: h[1];
+                    toReplace = h[h.Length - 1];
 
-                        toReplace = h[h.Length - 1];
+                    string[] survey_col_info = null;
 
-                        //xlRange_Choices.AutoFilter(1, "");
-
-                        int rowIndex;
-
-                        if (h.Length == 3 && !string.IsNullOrEmpty(multiple_choice_str))//type.StartsWith("select_multiple"))
+                    try
+                    {
+                        if (h.Length <= 2)
                         {
-                            //search string in choices workbook if multiple choice
-                            xlRange_Choices.AutoFilter(1, multiple_choice_str);
-
-                            rowIndex = findCodeRowIndex(
-                                xlRange_Choices.SpecialCells(Excel.XlCellType.xlCellTypeVisible, Type.Missing),
-                                                                        toReplace);
-
+                            survey_col_info = listSurvey.FirstOrDefault(x => x.Key == toReplace).Value;
+                            xlRange_Dataset.Cells[rowHeader, j].Value = survey_col_info[2];
                         }
-                        else
+                        else if (h.Length == 3)
                         {
-                            //search string in survey workbook if not multiple choice 
-                            rowIndex = findCodeRowIndex(xlRange_Survey, toReplace);
-                            if (!string.IsNullOrEmpty(multiple_choice_str))
+                            //in the dataset results => h[1] survey question code (h[2] choices code/ to use later, h[0] type)
+                            survey_col_info = listSurvey.FirstOrDefault(x => x.Key == h[1]).Value;
+
+                            //no important if tmp[0] is select_one or select_multiple
+                            if (string.IsNullOrEmpty(survey_col_info[1]))
                             {
-                                multiple_choice_str = null;
-                            }
-                        }
-
-
-
-                        if (rowIndex != -1)
-                        {
-                            Excel._Worksheet xlWorksheet;
-
-                            if (string.IsNullOrEmpty(multiple_choice_str))
-                                xlWorksheet = xlWorksheet_Survey;
-                            else
-                                xlWorksheet = xlWorksheet_Choices;
-
-                            string label =
-                            xlWorksheet.Cells[rowIndex, DATA_LABEL_POSITION].Value.ToString();
-
-                            xlRange_Dataset.Cells[i, j].Value = label;
-
-                            if (xlWorksheet == xlWorksheet_Survey)
-                            {
-                                string type = xlWorksheet.Cells[rowIndex, DATA_TYPE_POSITION].Value.ToString();
-
-                                if (type.StartsWith("select_multiple"))
-                                {
-                                    multiple_choice_str = type.Split(' ')[1];
-                                }
-                                else if (type.StartsWith("select_one"))
-                                { 
-                                    string single_choice_str = type.Split(' ')[1];
-                                    //changeLabelOfRowsBelow()
-                                    //xlWorksheet_Choices.AutoFilterMode = false; 
-                                    bool tmp = xlRange_Choices.AutoFilter(1, single_choice_str);
-                         
-                                    var a = 1;
-                                    do
-                                    {
-                                        a++;
-                                        try
-                                        {
-                                            string cell = xlWorksheet_Dataset.Cells[a, j].Value.ToString();
-                                            int row = string.IsNullOrEmpty(cell)?-1:findCodeRowIndex(
-                                                    xlRange_Choices.SpecialCells(Excel.XlCellType.xlCellTypeVisible, Type.Missing),
-                                                                                                                    cell);
-                                            if (row != -1)
-                                            {
-                                                string lbl = xlWorksheet_Choices.Cells[row, DATA_LABEL_POSITION].Value.ToString();
-                                                xlRange_Dataset.Cells[a, j].Value = lbl;
-                                            }
-
-                                        }
-                                        catch (Exception ex){
-                                           // if (a == 2 && j == 1)
-                                             //   MessageBox.Show(ex.Message);
-                                        }
-                                        
-                                        Dispatcher.Invoke(DispatcherPriority.Normal, new Action(()=>{
-                                       // ProgressIndicator.BusyContent = string.Format(" Column #{0}", j.ToString());
-                                            lblTest.Content = string.Format(" Column {0} / Row {1}", j, a);
-
-                                        }));
-
-
-                                    } while (a < rowCount_Dataset);
-
-                                    
-                                }
-
-
+                                List<CodeLabel> _codeLabels = listChoices.FirstOrDefault(x => x.Key == survey_col_info[1]).Value;
+                                CodeLabel _codeLabel = _codeLabels.Find(x => x.code == h[2]);
+                                xlRange_Dataset.Cells[rowHeader, j].Value = _codeLabel.label;
 
                             }
-
-                            
-                            
-
 
                         }
 
                     }
-
-                    xlWorkbook_Results.SaveAs(converted_file);
-
-                    MessageBox.Show("File Saved!");
-                    //int rowCount = xlRange_Dataset.Rows.Count;
-
-                    //int rowCount2 = xlRange_Choices.Rows.Count;
-
-                    //lblTest.Content = string.Format("row count: {0} / {1}", rowCount, rowCount2);
+                    catch { }
 
 
+                    int row = 1; //change data for entire column
+
+                    do
+                    {
+                        row++;
+                        try
+                        {
+                            string cell = xlWorksheet_Dataset.Cells[row, j].Value.ToString();
+
+                            if (survey_col_info[0] == "select_multiple")
+                            {
+                                break;
+                            }
+
+                            if (string.IsNullOrEmpty(cell) || string.IsNullOrEmpty(survey_col_info[0]))
+                                continue;
+
+                            List<CodeLabel> _codeLabels = listChoices.FirstOrDefault(x => x.Key == survey_col_info[1]).Value;
+                            CodeLabel _codeLabel = _codeLabels.Find(x => x.code == cell);
+                            xlRange_Dataset.Cells[row, j].Value = _codeLabel.label;
+
+                        }
+                        catch (Exception ex)
+                        {
+
+                        }
+
+
+                    } while (row < rowCount_Dataset);
 
 
 
-                    //cleanup
-                    GC.Collect();
-                    GC.WaitForPendingFinalizers();
 
-                    //rule of thumb for releasing com objects:
-                    //  never use two dots, all COM objects must be referenced and released individually
-                    //  ex: [somthing].[something].[something] is bad
+                }
 
-                    //release com objects to fully kill excel process from running in the background
-                    Marshal.ReleaseComObject(xlRange_Dataset);
-                    Marshal.ReleaseComObject(xlWorksheet_Dataset);
+                xlWorkbook_Results.SaveAs(converted_file);
 
-                    Marshal.ReleaseComObject(xlRange_Survey);
-                    Marshal.ReleaseComObject(xlWorksheet_Survey);
+                //cleanup
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
 
-                    Marshal.ReleaseComObject(xlRange_Choices);
-                    Marshal.ReleaseComObject(xlWorksheet_Choices);
+                //release com objects to fully kill excel process from running in the background
+                Marshal.ReleaseComObject(xlRange_Dataset);
+                Marshal.ReleaseComObject(xlWorksheet_Dataset);
 
-                    //close and release
-                    xlWorkbook_Results.Close();
-                    Marshal.ReleaseComObject(xlWorkbook_Results);
+                //close and release
+                xlWorkbook_Results.Close();
+                Marshal.ReleaseComObject(xlWorkbook_Results);
 
-                    xlWorkbook_XLSForm.Close();
-                    Marshal.ReleaseComObject(xlWorkbook_XLSForm);
+                //quit and release
+                xlApp.Quit();
+                Marshal.ReleaseComObject(xlApp);
 
-                    //quit and release
-                    xlApp.Quit();
-                    Marshal.ReleaseComObject(xlApp);
+                //- end of task
+            //}).ContinueWith((task) =>
+            //{
+            //    ProgressIndicator.IsBusy = false;
+            //    stopWatch.Stop();
+
+            //    MessageBox.Show(string.Format("{0} minute(s)", stopWatch.Elapsed.Minutes));
+
+            //}, TaskScheduler.FromCurrentSynchronizationContext()); 
 
 
-            /*
-                    //- end of task
-                }).ContinueWith((task) => {
-                    ProgressIndicator.IsBusy = false;
-                }, TaskScheduler.FromCurrentSynchronizationContext());
+            //ProgressIndicator.IsBusy = true;
 
-            */
+        }
+
+        private List<KeyValuePair<string, List<CodeLabel>>> getListFromChoicesWorksheet(Excel.Range xlRange)
+        {
+            const int DATA_LABEL_POSITION = 3;
+            const int DATA_CODE_POSITION = 2;
+            const int DATA_GRP_POSITION = 1;
+
+            int rowCount = xlRange.Rows.Count;
+
+            List<KeyValuePair<string, List<CodeLabel>>> _list = new List<KeyValuePair<string, List<CodeLabel>>>();
+
+            string codeGrpTmp = null;
+
+            List<CodeLabel> codeLabelGrp = new List<CodeLabel>(); //not initialized
+
+            //a=2 => skip the header
+            for(int a = 2; a < rowCount; a++)
+            {
+	            string codeGrp = xlRange.Cells[a, DATA_GRP_POSITION].Value.ToString();
+ 
+	            if(string.IsNullOrEmpty(codeGrpTmp)) //ok
+	            {
+		            codeGrpTmp = codeGrp;
+	            }
+	            else if(codeGrpTmp != codeGrp) //it is in a different group
+	            {
+                    //let store the old group as key value pair group=>list(code,label)
+		            _list.Add(new KeyValuePair<string, List<CodeLabel>>(codeGrpTmp, codeLabelGrp));
+
+                    //start a new group
+                    codeLabelGrp = new List<CodeLabel>();
+
+                    //set codeGrpTmp to new group info
+                    codeGrpTmp = codeGrp;
+		
+	            }
+
+                codeLabelGrp.Add(
+                         new CodeLabel(
+                             xlRange.Cells[a, DATA_CODE_POSITION].Value.ToString(),
+                             xlRange.Cells[a, DATA_LABEL_POSITION].Value.ToString()
+                         )
+                     );
+	            
+		
+            }
+
+            return _list;
+        }
+
+
+        private List<KeyValuePair<string, string[]>> getListFromSurveyWorksheet(Excel.Range xlRange)
+        {
+            const int DATA_LABEL_POSITION = 3;
+            const int DATA_CODE_POSITION = 2;
+            const int DATA_TYPE_POSITION = 1;
+
+            int rowCount = xlRange.Rows.Count;
+
+            List<KeyValuePair<string, string[]>> _list = new List<KeyValuePair<string, string[]>>();
+
+            string[] _values = new string[3]; //not initialized
+
+            //a=2 => skip the header
+            for (int a = 2; a < rowCount; a++)
+            {
+                string type = null;
+
+                try
+                {
+                    type = xlRange.Cells[a, DATA_TYPE_POSITION].Value.ToString();
+                }
+                catch 
+                { 
                 
+                }
 
-                
+                if (string.IsNullOrEmpty(type) || type.StartsWith("begin") || type.StartsWith("end r") || type.StartsWith("end g"))
+                    continue;
+
+                string code = xlRange.Cells[a, DATA_CODE_POSITION].Value.ToString();
+
+                if (type.StartsWith("select"))
+                { 
+                    string[] tmp = new string[3];
+                    var split = type.Trim(' ').Split(' ');
+                    tmp[0] = split[0];
+                    tmp[1] = split[1];
+                    tmp[2] = xlRange.Cells[a, DATA_LABEL_POSITION].Value.ToString();
+
+                    _list.Add(new KeyValuePair<string, string[]>(code, tmp));
+                    continue;
+
+                }
 
 
 
+                _list.Add(new KeyValuePair<string, string[]>(code,
+                        new string[3] { 
+                            "", "", xlRange.Cells[a, DATA_LABEL_POSITION].Value.ToString()
+                        }
+                    ));
+
+
+            }
+
+            return _list;
+        }
+
+        private void donothing()
+        {
+            return;
+            //throw new NotImplementedException();
         }
 
         private static int findCodeRowIndex(Excel.Range xlRange, string search)
