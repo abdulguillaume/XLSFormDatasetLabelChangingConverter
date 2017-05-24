@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -74,14 +75,18 @@ namespace XLSFormDatasetLabelChangingConverter
             //txtEditor.Text = File.ReadAllText(openFileDialog.FileName);
         }
 
-        private void btnXLFFormFile_Click(object sender, RoutedEventArgs e)
+        private void btnXLSFormFile_Click(object sender, RoutedEventArgs e)
         {
             OpenFileDialog openFileDialog = new OpenFileDialog();
 
             openFileDialog.Filter = "Excel file (*.xls;*.xlsx)|*.xls;*.xlsx";
 
+            var tmp = openFileDialog.FileName;
+
             if (openFileDialog.ShowDialog() == true)
                 txtXLSFormFile.Text = openFileDialog.FileName;
+
+            if (tmp == openFileDialog.FileName) return;
 
             ProgressIndicator.IsBusy = true;
 
@@ -153,27 +158,28 @@ namespace XLSFormDatasetLabelChangingConverter
 
             var converted_file = string.Format("{0}\\Converted_{1}.xlsx", Environment.GetFolderPath(Environment.SpecialFolder.Desktop), DateTime.Now.ToFileTime());
 
-           // Stopwatch stopWatch = new Stopwatch();
+            Stopwatch stopWatch = new Stopwatch();
 
-           // stopWatch.Start();
+            stopWatch.Start();
 
+            ProgressIndicator.IsBusy = true;
 
-          //Task.Factory.StartNew(() =>
-          //  {
+          Task.Factory.StartNew(() =>
+            {
 
-          //      //- start of task
+                //- start of task
 
-          //      Dispatcher.Invoke(DispatcherPriority.Normal, new Action(() =>
-          //      {
-          //          ProgressIndicator.BusyContent = "Processing file...";
-          //      }));
+                Dispatcher.Invoke(DispatcherPriority.Normal, new Action(() =>
+                {
+                    ProgressIndicator.BusyContent = "Converting Kobo Results file...";
+                }));
  
 
                 //start decoding labels
 
                 int rowHeader = 1; //this will be fix during the whole process
 
-                for (var j = 1; j < colCount_Dataset; j++)
+                for (var j = 1; j <= colCount_Dataset; j++)
                 {
                     string toReplace;
                     //first row has the header => Cells(1,j)
@@ -194,26 +200,55 @@ namespace XLSFormDatasetLabelChangingConverter
 
                     try
                     {
-                        if (h.Length <= 2)
+                        if (h.Length >= 2)
                         {
-                            survey_col_info = listSurvey.FirstOrDefault(x => x.Key == toReplace).Value;
-                            xlRange_Dataset.Cells[rowHeader, j].Value = survey_col_info[2];
-                        }
-                        else if (h.Length == 3)
-                        {
-                            //in the dataset results => h[1] survey question code (h[2] choices code/ to use later, h[0] type)
-                            survey_col_info = listSurvey.FirstOrDefault(x => x.Key == h[1]).Value;
+                            string tmp = h[h.Length - 2]; //let see if this is a column for multiple question
 
-                            //no important if tmp[0] is select_one or select_multiple
-                            if (string.IsNullOrEmpty(survey_col_info[1]))
+                            if (tmp == "reason_no_id")
+                                donothing(); ;
+
+                            survey_col_info = listSurvey.FirstOrDefault(x => x.Key == tmp).Value;
+
+                            //if sci[0] is group info => group/valueToChange, just change the label
+                            if (survey_col_info[0].StartsWith("begin"))
                             {
+                                survey_col_info = listSurvey.FirstOrDefault(x => x.Key == toReplace).Value;
+                                xlRange_Dataset.Cells[rowHeader, j].Value = survey_col_info[2];
+                            }
+                            else
+                            {
+                                //it is answer to multiple choice question
                                 List<CodeLabel> _codeLabels = listChoices.FirstOrDefault(x => x.Key == survey_col_info[1]).Value;
-                                CodeLabel _codeLabel = _codeLabels.Find(x => x.code == h[2]);
+                                CodeLabel _codeLabel = _codeLabels.Find(x => x.code == toReplace);
                                 xlRange_Dataset.Cells[rowHeader, j].Value = _codeLabel.label;
-
                             }
 
                         }
+                        else {
+                            survey_col_info = listSurvey.FirstOrDefault(x => x.Key == toReplace).Value;
+                            xlRange_Dataset.Cells[rowHeader, j].Value = survey_col_info[2];
+                        }
+
+                        //if (h.Length <= 2)
+                        //{
+                        //    survey_col_info = listSurvey.FirstOrDefault(x => x.Key == toReplace).Value;
+                        //    xlRange_Dataset.Cells[rowHeader, j].Value = survey_col_info[2];
+                        //}
+                        //else if (h.Length == 3)
+                        //{
+                        //    //in the dataset results => h[1] survey question code (h[2] choices code/ to use later, h[0] type)
+                        //    survey_col_info = listSurvey.FirstOrDefault(x => x.Key == h[1]).Value;
+
+                        //    //no important if tmp[0] is select_one or select_multiple
+                        //    if (string.IsNullOrEmpty(survey_col_info[1]))
+                        //    {
+                        //        List<CodeLabel> _codeLabels = listChoices.FirstOrDefault(x => x.Key == survey_col_info[1]).Value;
+                        //        CodeLabel _codeLabel = _codeLabels.Find(x => x.code == h[2]);
+                        //        xlRange_Dataset.Cells[rowHeader, j].Value = _codeLabel.label;
+
+                        //    }
+
+                        //}
 
                     }
                     catch { }
@@ -226,15 +261,17 @@ namespace XLSFormDatasetLabelChangingConverter
                         row++;
                         try
                         {
-                            string cell = xlWorksheet_Dataset.Cells[row, j].Value.ToString();
-
                             if (survey_col_info[0] == "select_multiple")
                             {
                                 break;
                             }
 
-                            if (string.IsNullOrEmpty(cell) || string.IsNullOrEmpty(survey_col_info[0]))
-                                continue;
+                            if (survey_col_info[0] == "any")
+                                break;
+
+                            string cell = xlWorksheet_Dataset.Cells[row, j].Value.ToString();
+
+                            
 
                             List<CodeLabel> _codeLabels = listChoices.FirstOrDefault(x => x.Key == survey_col_info[1]).Value;
                             CodeLabel _codeLabel = _codeLabels.Find(x => x.code == cell);
@@ -243,13 +280,11 @@ namespace XLSFormDatasetLabelChangingConverter
                         }
                         catch (Exception ex)
                         {
-
+                            donothing();
                         }
 
 
                     } while (row < rowCount_Dataset);
-
-
 
 
                 }
@@ -273,17 +308,16 @@ namespace XLSFormDatasetLabelChangingConverter
                 Marshal.ReleaseComObject(xlApp);
 
                 //- end of task
-            //}).ContinueWith((task) =>
-            //{
-            //    ProgressIndicator.IsBusy = false;
-            //    stopWatch.Stop();
+            }).ContinueWith((task) =>
+            {
+                ProgressIndicator.IsBusy = false;
+                stopWatch.Stop();
 
-            //    MessageBox.Show(string.Format("{0} minute(s)", stopWatch.Elapsed.Minutes));
+                MessageBox.Show(string.Format("Convertion duration: {0} second(s)", stopWatch.Elapsed.TotalSeconds));
 
-            //}, TaskScheduler.FromCurrentSynchronizationContext()); 
+            }, TaskScheduler.FromCurrentSynchronizationContext()); 
 
 
-            //ProgressIndicator.IsBusy = true;
 
         }
 
@@ -304,7 +338,17 @@ namespace XLSFormDatasetLabelChangingConverter
             //a=2 => skip the header
             for(int a = 2; a < rowCount; a++)
             {
-	            string codeGrp = xlRange.Cells[a, DATA_GRP_POSITION].Value.ToString();
+                string codeGrp = null;
+                try { 
+	             codeGrp = xlRange.Cells[a, DATA_GRP_POSITION].Value.ToString(); //need to handle exception
+                }
+                catch
+                {
+
+                }
+
+                if (string.IsNullOrEmpty(codeGrp)) 
+                    continue;
  
 	            if(string.IsNullOrEmpty(codeGrpTmp)) //ok
 	            {
@@ -363,7 +407,7 @@ namespace XLSFormDatasetLabelChangingConverter
                 
                 }
 
-                if (string.IsNullOrEmpty(type) || type.StartsWith("begin") || type.StartsWith("end r") || type.StartsWith("end g"))
+                if (string.IsNullOrEmpty(type) || type=="end repeat" || type == "end group")
                     continue;
 
                 string code = xlRange.Cells[a, DATA_CODE_POSITION].Value.ToString();
@@ -371,21 +415,36 @@ namespace XLSFormDatasetLabelChangingConverter
                 if (type.StartsWith("select"))
                 { 
                     string[] tmp = new string[3];
-                    var split = type.Trim(' ').Split(' ');
+                    type = Regex.Replace(type, @"\s+", " ");
+                    var split = type.Split(' ');
                     tmp[0] = split[0];
                     tmp[1] = split[1];
+
+                    if (tmp[1] == "")
+                        donothing();
+
                     tmp[2] = xlRange.Cells[a, DATA_LABEL_POSITION].Value.ToString();
 
                     _list.Add(new KeyValuePair<string, string[]>(code, tmp));
                     continue;
 
                 }
+                else if (type.StartsWith("begin"))
+                {
+                    string[] tmp = new string[3];
+                    tmp[0] = type;
+                    tmp[1] = "any";
+                    tmp[2] = xlRange.Cells[a, DATA_LABEL_POSITION].Value.ToString();
+
+                    _list.Add(new KeyValuePair<string, string[]>(code, tmp));
+                    continue;
+                }
 
 
-
+                //normal type like text, date, start etc.
                 _list.Add(new KeyValuePair<string, string[]>(code,
                         new string[3] { 
-                            "", "", xlRange.Cells[a, DATA_LABEL_POSITION].Value.ToString()
+                            "any", "any", xlRange.Cells[a, DATA_LABEL_POSITION].Value.ToString()
                         }
                     ));
 

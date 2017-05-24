@@ -27,7 +27,7 @@
                         <ColumnDefinition Width="1*" />
                     </Grid.ColumnDefinitions>
                     <TextBox x:Name="txtXLSFormFile" Grid.Column="0"></TextBox>
-                    <Button Name="btnXLFFormFile" Grid.Column="1" Click="btnXLFFormFile_Click">Open file</Button>
+                    <Button Name="btnXLSFormFile" Grid.Column="1" Click="btnXLSFormFile_Click">Open file</Button>
                 </Grid>
 
                 <Label></Label>
